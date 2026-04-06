@@ -5,7 +5,7 @@ import { zodResolver } from "@/lib/zod-resolver";
 import { z } from "zod";
 import { format } from "date-fns";
 import { Calendar, Clock, Users, CheckCircle2, ChevronRight } from "lucide-react";
-import { useListSessions, useCreateBooking } from "@workspace/api-client-react";
+import { useListSessions } from "@workspace/api-client-react";
 import type { SessionType } from "@workspace/api-client-react";
 
 const bookingSchema = z.object({
@@ -25,41 +25,48 @@ const TIME_SLOTS = ["9:00 AM", "11:00 AM", "1:00 PM", "3:00 PM", "5:00 PM", "7:0
 
 export default function Booking() {
   const { data: sessions, isLoading: sessionsLoading } = useListSessions();
-  const createBookingMutation = useCreateBooking();
-  
+
   const [selectedSession, setSelectedSession] = useState<SessionType | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
 
-  const { register, handleSubmit, formState: { errors, isSubmitting }, watch, setValue } = useForm<BookingForm>({
+  const { register, handleSubmit, formState: { errors, isSubmitting }, watch } = useForm<BookingForm>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
       numberOfPeople: 1
     }
   });
 
-  const selectedDate = watch("date");
-  const selectedTime = watch("timeSlot");
-
   const onSubmit = async (data: BookingForm) => {
     if (!selectedSession) return;
+    setSubmitError(false);
     try {
-      await createBookingMutation.mutateAsync({
-        data: {
-          ...data,
-          sessionTypeId: selectedSession.id
-        }
+      const payload = {
+        ...data,
+        sessionName: selectedSession.name,
+        sessionPrice: `$${(selectedSession.priceInCents / 100).toFixed(2)}`,
+        _subject: `New Session Request: ${selectedSession.name}`,
+        _template: "table",
+        _captcha: "false"
+      };
+      const res = await fetch("https://formsubmit.co/ajax/jenniferlpalmieri1@gmail.com", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(payload)
       });
+      if (!res.ok) throw new Error("Submission failed");
       setIsSuccess(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
-      console.error("Booking failed", err);
+      console.error("Request failed", err);
+      setSubmitError(true);
     }
   };
 
   if (isSuccess) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center p-4">
-        <motion.div 
+        <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           className="bg-card max-w-xl w-full rounded-[2rem] p-12 text-center shadow-2xl border border-border"
@@ -67,11 +74,11 @@ export default function Booking() {
           <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-8">
             <CheckCircle2 className="w-12 h-12" />
           </div>
-          <h2 className="text-4xl font-serif font-bold mb-4">Booking Confirmed!</h2>
+          <h2 className="text-4xl font-serif font-bold mb-4">Request Received!</h2>
           <p className="text-lg text-muted-foreground mb-8">
-            Thank you for booking with Mah Jenn! Jenn will be in touch shortly with all the details for your upcoming session.
+            Thank you for your request! Jenn will be in touch shortly to confirm the details for your upcoming session.
           </p>
-          <button 
+          <button
             onClick={() => window.location.href = "/"}
             className="px-8 py-4 bg-primary text-primary-foreground rounded-xl font-bold hover:bg-primary/90 transition-colors"
           >
@@ -97,25 +104,25 @@ export default function Booking() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 relative z-20">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
+
           {/* Left Column: Session Selection */}
           <div className="lg:col-span-5 space-y-6">
             <h3 className="font-bold text-2xl px-2">1. Choose a Session</h3>
-            
+
             {sessionsLoading ? (
               <div className="space-y-4">
                 {[1,2,3].map(n => <div key={n} className="h-32 bg-muted animate-pulse rounded-2xl"></div>)}
               </div>
             ) : sessions?.map((session) => (
-              <div 
+              <div
                 key={session.id}
                 onClick={() => setSelectedSession(session)}
                 className={`p-6 rounded-2xl border-2 transition-all cursor-pointer relative ${
-                  selectedSession?.id === session.id 
-                    ? "border-primary bg-primary/5 shadow-lg" 
+                  selectedSession?.id === session.id
+                    ? "border-primary bg-primary/5 shadow-lg"
                     : session.category === "package"
-                    ? "border-primary/40 bg-primary/[0.03] hover:border-primary/60 hover:shadow-md"
-                    : "border-border bg-card hover:border-primary/30 hover:shadow-md"
+                      ? "border-primary/40 bg-primary/[0.03] hover:border-primary/60 hover:shadow-md"
+                      : "border-border bg-card hover:border-primary/30 hover:shadow-md"
                 }`}
               >
                 {session.category === "package" && (
@@ -144,7 +151,7 @@ export default function Booking() {
                 <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center">
                   <ChevronRight className="w-16 h-16 text-muted-foreground/30 mb-4" />
                   <h3 className="text-2xl font-bold mb-2">Select a session first</h3>
-                  <p className="text-muted-foreground">Choose one of the offerings on the left to proceed with booking.</p>
+                  <p className="text-muted-foreground">Choose one of the offerings on the left to proceed with your request.</p>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
@@ -155,21 +162,21 @@ export default function Booking() {
                         <label className="block text-sm font-medium mb-2 text-foreground/80 flex items-center gap-2">
                           <Calendar className="w-4 h-4" /> Select Date
                         </label>
-                        <input 
-                          type="date" 
+                        <input
+                          type="date"
                           min={format(new Date(), 'yyyy-MM-dd')}
-                          {...register("date")} 
-                          className="w-full p-4 rounded-xl border-2 border-border focus:border-primary focus:ring-0 bg-background text-foreground text-lg outline-none transition-all" 
+                          {...register("date")}
+                          className="w-full p-4 rounded-xl border-2 border-border focus:border-primary focus:ring-0 bg-background text-foreground text-lg outline-none transition-all"
                         />
                         {errors.date && <span className="text-xs text-destructive mt-1 block">{errors.date.message}</span>}
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm font-medium mb-2 text-foreground/80 flex items-center gap-2">
                           <Clock className="w-4 h-4" /> Select Time
                         </label>
-                        <select 
-                          {...register("timeSlot")} 
+                        <select
+                          {...register("timeSlot")}
                           className="w-full p-4 rounded-xl border-2 border-border focus:border-primary focus:ring-0 bg-background text-foreground text-lg outline-none transition-all appearance-none"
                         >
                           <option value="">Choose a time...</option>
@@ -201,25 +208,25 @@ export default function Booking() {
                         <input type="tel" placeholder="Phone Number" {...register("phone")} className="w-full p-4 rounded-xl border-2 border-border focus:border-primary outline-none bg-background transition-all" />
                       </div>
                     </div>
-                    
+
                     <div className="mt-5">
                       <label className="block text-sm font-medium mb-2 text-foreground/80">Number of Participants (Max {selectedSession.maxParticipants})</label>
-                      <input 
-                        type="number" 
-                        min="1" 
+                      <input
+                        type="number"
+                        min="1"
                         max={selectedSession.maxParticipants}
-                        {...register("numberOfPeople")} 
-                        className="w-full p-4 rounded-xl border-2 border-border focus:border-primary outline-none bg-background transition-all" 
+                        {...register("numberOfPeople")}
+                        className="w-full p-4 rounded-xl border-2 border-border focus:border-primary outline-none bg-background transition-all"
                       />
                       {errors.numberOfPeople && <span className="text-xs text-destructive mt-1 block">{errors.numberOfPeople.message}</span>}
                     </div>
 
                     <div className="mt-5">
-                      <textarea 
-                        placeholder="Any special requests or questions?" 
+                      <textarea
+                        placeholder="Any special requests or questions?"
                         rows={3}
-                        {...register("specialRequests")} 
-                        className="w-full p-4 rounded-xl border-2 border-border focus:border-primary outline-none bg-background transition-all resize-none" 
+                        {...register("specialRequests")}
+                        className="w-full p-4 rounded-xl border-2 border-border focus:border-primary outline-none bg-background transition-all resize-none"
                       />
                     </div>
                   </div>
@@ -229,11 +236,11 @@ export default function Booking() {
                     disabled={isSubmitting}
                     className="w-full py-5 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground rounded-xl font-bold text-xl shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                   >
-                    {isSubmitting ? "Confirming..." : `Confirm Booking - $${(selectedSession.priceInCents / 100).toFixed(2)}`}
+                    {isSubmitting ? "Sending..." : `Request a Session - $${(selectedSession.priceInCents / 100).toFixed(2)}`}
                   </button>
-                  
-                  {createBookingMutation.isError && (
-                    <p className="text-destructive text-center mt-4">Failed to complete booking. Please try again.</p>
+
+                  {submitError && (
+                    <p className="text-destructive text-center mt-4">Failed to send request. Please try again.</p>
                   )}
                 </form>
               )}
